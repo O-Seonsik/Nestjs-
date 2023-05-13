@@ -37,7 +37,7 @@ export class UsersService {
   }
 
   /**
-   * 회원 가입 인증 이메일을 ㅂ라송합니다.
+   * 회원 가입 인증 이메일을 발송합니다.
    * @param email
    * @param signupVerifyToken
    * @private
