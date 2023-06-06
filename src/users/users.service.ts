@@ -1,12 +1,26 @@
 import * as uuid from 'uuid';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { EmailService } from '../email/email.service';
 import { UserInfo } from './UserInfo';
+import { InjectRepository } from '@nestjs/typeorm';
+import { UserEntity } from './entities/user.entity';
+import { DataSource, Repository } from 'typeorm';
+import { ulid } from 'ulid';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly emailService: EmailService) {}
+  constructor(
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
+    private readonly dataSource: DataSource,
+    private readonly emailService: EmailService,
+  ) {}
   async createUser(name: string, email: string, password: string) {
+    const userExist = await this.checkUserExists(email);
+    if (userExist)
+      throw new UnprocessableEntityException(
+        '해당 이메일로는 가입할 수 없습니다.',
+      );
     await this.checkUserExists(email);
 
     const signupVerifyToken = uuid.v1();
@@ -15,8 +29,12 @@ export class UsersService {
     await this.sendMemberJoinEmail(email, signupVerifyToken);
   }
 
-  private checkUserExists(email: string) {
-    return false; // TODO: DB 연동 후 구현
+  private async checkUserExists(emailAddress: string) {
+    const user = await this.usersRepository.findOne({
+      where: { email: emailAddress },
+    });
+
+    return user !== undefined;
   }
 
   /**
@@ -27,13 +45,80 @@ export class UsersService {
    * @param signupVerifyToken
    * @private
    */
-  private saveUser(
+  private async saveUser(
     name: string,
     email: string,
     password: string,
     signupVerifyToken: string,
   ) {
-    return; // TODO: DB 연동 후 구현
+    const user = new UserEntity();
+    user.id = ulid();
+    user.name = name;
+    user.email = email;
+    user.password = password;
+    user.signupVerifyToken = signupVerifyToken;
+    await this.usersRepository.save(user);
+  }
+
+  /**
+   * 트랜잭션을 통해 유저를 데이터베이스에 저장합니다.
+   * @param name
+   * @param email
+   * @param password
+   * @param signupVerifyToken
+   * @private
+   */
+  private async saveUserUsingQueryRunner(
+    name: string,
+    email: string,
+    password: string,
+    signupVerifyToken: string,
+  ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const user = new UserEntity();
+      user.id = ulid();
+      user.name = name;
+      user.email = email;
+      user.password = password;
+      user.signupVerifyToken = signupVerifyToken;
+
+      await queryRunner.manager.save(user);
+
+      // throw new InternalServerErrorException();
+
+      await queryRunner.commitTransaction();
+    } catch (e) {
+      // 에러가 발생하면 롤백
+      await queryRunner.rollbackTransaction();
+    } finally {
+      // 직접 작성한 QueryRunnner는 해제시켜줘야 함
+      await queryRunner.release();
+    }
+  }
+
+  private async saveUserUsingTransactionMethod(
+    name: string,
+    email: string,
+    password: string,
+    signupVerifyToken: string,
+  ) {
+    await this.dataSource.transaction(async (manager) => {
+      const user = new UserEntity();
+      user.id = ulid();
+      user.name = name;
+      user.email = email;
+      user.password = password;
+      user.signupVerifyToken = signupVerifyToken;
+
+      await manager.save(user);
+
+      // throw new InternalServerErrorException();
+    });
   }
 
   /**
