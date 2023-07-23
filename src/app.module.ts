@@ -5,10 +5,17 @@ import { ConfigModule } from '@nestjs/config';
 import emailConfig from './config/email.config';
 import { validationSchema } from './config/validationSchema';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { AuthService } from './auth/auth.service';
 import { AuthModule } from './auth/auth.module';
 import authConfig from './config/auth.config';
+import { AppService } from './app.service';
+import { AppController } from './app.controller';
+import { LoggerModule } from './logger/logger.module';
+import * as winston from 'winston';
+import {
+  utilities as nestWinstonModuleUtilities,
+  WinstonModule,
+} from 'nest-winston';
 
 @Module({
   imports: [
@@ -35,9 +42,23 @@ import authConfig from './config/auth.config';
       migrationsTableName: 'migrations',
     }),
     AuthModule,
+    LoggerModule,
+    WinstonModule.forRoot({
+      transports: [
+        new winston.transports.Console({
+          level: process.env.NODE_ENV === 'production' ? 'info' : 'silly',
+          format: winston.format.combine(
+            winston.format.timestamp(),
+            nestWinstonModuleUtilities.format.nestLike('MyApp', {
+              prettyPrint: true,
+            }),
+          ),
+        }),
+      ],
+    }),
   ],
-  controllers: [],
-  providers: [AuthService],
+  controllers: [AppController],
+  providers: [AuthService, AppService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): any {

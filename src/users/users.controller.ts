@@ -7,6 +7,7 @@ import {
   Query,
   Headers,
   UseGuards,
+  Inject,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -14,15 +15,20 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { UserLoginDto } from './dto/user-login.dto';
 import { UserInfo } from './UserInfo';
 import { AuthGuard } from '../guards/auth.guard';
+import { WINSTON_MODULE_PROVIDER, WinstonLogger } from 'nest-winston';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: WinstonLogger,
+  ) {}
 
   @Post()
   async createUser(@Body() dto: CreateUserDto): Promise<void> {
     const { name, email, password } = dto;
     await this.usersService.createUser(name, email, password);
+    this.printWinstonLog(dto);
   }
 
   @Post('/email-verify')
@@ -46,5 +52,15 @@ export class UsersController {
     @Param('id') userId: string,
   ): Promise<UserInfo> {
     return this.usersService.getUserInfo(userId);
+  }
+
+  private printWinstonLog(dto) {
+    // console.log(this.logger.name);
+
+    this.logger.error('error: ', dto);
+    this.logger.warn('warn: ', dto);
+    this.logger.log('log: ', dto);
+    this.logger.verbose('verbose: ', dto);
+    this.logger.debug('debug: ', dto);
   }
 }
